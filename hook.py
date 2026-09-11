@@ -50,7 +50,8 @@ if event == "UserPromptSubmit":
             os.remove(f)
 elif event == "PostToolUse":
     # Record work done this turn, ignoring the calls that write the canvas itself.
-    if sdir not in json.dumps(d.get("tool_input", {})):
+    blob = json.dumps(d.get("tool_input", {}))
+    if sdir not in blob and "turn.html" not in blob:  # paths are often shell variables
         open(last_tool, "w").write(str(time.time()))
 elif event == "Stop" and not d.get("stop_hook_active"):
     if not os.path.exists(stamp):  # no prompt seen yet in this session
