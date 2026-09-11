@@ -3,7 +3,8 @@
 
 UserPromptSubmit stamps the start of a turn. Stop refuses to end a turn whose
 turn.html is older than that stamp, so the canvas cannot silently go stale.
-SessionStart opens the canvas automatically, and is only used if you register it.
+SessionEnd closes the canvas pane so it does not outlive the agent. SessionStart
+opens the canvas automatically, and is only used if you register it.
 """
 import json
 import os
@@ -31,6 +32,13 @@ if event == "SessionStart":
     sys.exit(0)
 
 if not os.path.exists(pane):  # canvas not on for this session
+    sys.exit(0)
+
+if event == "SessionEnd":
+    if d.get("reason") != "clear":  # /clear keeps the session, keep its canvas
+        subprocess.run([os.path.join(ROOT, "canvas.sh"), "off"],
+                       env=dict(os.environ, CLAUDE_CODE_SESSION_ID=sid),
+                       capture_output=True, timeout=10)
     sys.exit(0)
 
 if event == "UserPromptSubmit":

@@ -138,6 +138,18 @@ def page_png(d, full, page, w, page_h):
     return png
 
 
+def agent_gone(d):
+    """True when the pane this canvas was split from no longer exists."""
+    try:
+        pane = open(os.path.join(d, "agent_pane")).read().strip()
+    except FileNotFoundError:
+        return False
+    try:
+        return "error" in rpc("pane.get", {"pane_id": pane})
+    except Exception:
+        return False  # socket hiccup: keep running
+
+
 def place(png, w, h, cols, rows):
     data = base64.b64encode(open(png, "rb").read()).decode()
     return rpc("pane.graphics.set", {
@@ -178,8 +190,18 @@ def main():
     sys.stdout.write("\x1b[?1000h\x1b[?1006h\x1b[?25l\x1b[2J\x1b[H")  # wheel events, hide cursor
     sys.stdout.flush()
     last, page, pages, w, page_h, full = None, 0, 1, 0, 0, None
+    tick = 0
     try:
         while True:
+            tick += 1
+            if tick % 10 == 0 and agent_gone(d):  # agent session closed
+                log.write(f"{time.strftime('%H:%M:%S')} agent pane gone, closing\n"); log.flush()
+                try:
+                    rpc("pane.graphics.clear", {"pane_id": PANE})
+                    rpc("pane.close", {"pane_id": PANE})
+                except Exception:
+                    pass
+                return
             rows, cols = winsize()
             grid_rows = max(rows - 1, 1)
             key = (tuple(mtime(p) for p in inputs), rows, cols)

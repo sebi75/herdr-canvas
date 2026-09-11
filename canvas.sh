@@ -13,6 +13,13 @@ PANEFILE="$DIR/pane"
 PIDFILE="$DIR/watcher.pid"
 RATIO="${CANVAS_RATIO:-0.45}"
 
+# HERDR_PANE_ID can be stale after a reattach, so ask the server which pane we are in
+agent_pane() {
+  herdr pane current 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])' 2>/dev/null \
+    || echo "$HERDR_PANE_ID"
+}
+
 alive() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 pane_ok() { [ -f "$PANEFILE" ] && herdr pane get "$(cat "$PANEFILE")" >/dev/null 2>&1; }
 
@@ -26,9 +33,11 @@ case "${1:-on}" in
     [ -f "$DIR/turn.html" ] || echo '<div class="status">Canvas on. Waiting for the first turn.</div>' > "$DIR/turn.html"
     if pane_ok && alive; then echo "$DIR"; exit 0; fi
     if ! pane_ok; then
-      herdr pane split "$HERDR_PANE_ID" --direction right --ratio "$RATIO" --cwd "$DIR" \
+      AGENT="$(agent_pane)"
+      herdr pane split "$AGENT" --direction right --ratio "$RATIO" --cwd "$DIR" \
         | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])' > "$PANEFILE"
-      herdr pane rename "$(cat "$PANEFILE")" "canvas · $HERDR_PANE_ID" >/dev/null
+      herdr pane rename "$(cat "$PANEFILE")" "canvas · $AGENT" >/dev/null
+      echo "$AGENT" > "$DIR/agent_pane"
     fi
     herdr pane run "$(cat "$PANEFILE")" python3 "$ROOT/canvas-show.py" "$DIR" >/dev/null
     for _ in 1 2 3 4 5 6 7 8 9 10; do alive && break; sleep 0.3; done
@@ -38,7 +47,7 @@ case "${1:-on}" in
     alive && kill "$(cat "$PIDFILE")" 2>/dev/null || true
     pkill -f "canvas-show.py $DIR" 2>/dev/null || true
     pane_ok && herdr pane close "$(cat "$PANEFILE")" >/dev/null 2>&1 || true
-    rm -f "$PIDFILE" "$PANEFILE"
+    rm -f "$PIDFILE" "$PANEFILE" "$DIR/agent_pane"
     echo "canvas off"
     ;;
   status)
