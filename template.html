@@ -1,0 +1,41 @@
+<title>{{TITLE}}</title>
+<style>
+  :root { --bg:#131A1C; --panel:#1A2225; --ink:#E4EBE9; --muted:#97A5A8; --line:#2B3739; --accent:#57B8B2; --soft:#163537; --warn:#E0AB52; --warnsoft:#3A2E14; --mono:"IBM Plex Mono","SF Mono",Menlo,monospace; --sans:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; padding:20px 24px; }
+  main { display:grid; gap:20px; }
+  .status { border-left:4px solid var(--accent); padding:10px 14px; background:var(--panel); font-weight:600; }
+  .status small { display:block; font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:400; margin-top:4px; }
+  h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; font-family:var(--mono); font-weight:500; }
+  p { margin:0 0 8px; max-width:70ch; }
+  .flow { display:flex; flex-wrap:wrap; align-items:stretch; gap:8px; }
+  .box { flex:1 1 150px; border:1px solid var(--line); background:var(--panel); padding:10px 12px; }
+  .box b { display:block; font-size:13px; margin-bottom:2px; }
+  .box span { color:var(--muted); font-size:12.5px; }
+  .box.ok { border-color:var(--accent); }
+  .box.warn { border-color:var(--warn); }
+  .arrow { align-self:center; color:var(--muted); font-family:var(--mono); }
+  .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+  .col { border-top:2px solid var(--line); padding-top:8px; }
+  .col.now { border-top-color:var(--accent); }
+  ul { margin:0; padding-left:18px; }
+  li { margin-bottom:4px; }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; }
+  th, td { text-align:left; vertical-align:top; padding:6px 10px 6px 0; border-bottom:1px solid var(--line); }
+  th { font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:500; letter-spacing:.04em; }
+  .log { font-family:var(--mono); font-size:12.5px; }
+  .log li { list-style:none; display:flex; gap:12px; }
+  .log time { color:var(--muted); flex:0 0 3ch; }
+  code { font-family:var(--mono); font-size:.9em; background:var(--soft); padding:1px 5px; border-radius:3px; }
+  .tag { font-family:var(--mono); font-size:10.5px; padding:1px 6px; border-radius:3px; background:var(--soft); color:var(--accent); vertical-align:1px; }
+  .tag.w { background:var(--warnsoft); color:var(--warn); }
+  svg { max-width:100%; height:auto; }
+</style>
+<main>
+{{TURN}}
+  <section>
+    <h2>Turn log</h2>
+    <ul class="log">
+{{LOG}}
+    </ul>
+  </section>
+</main>
