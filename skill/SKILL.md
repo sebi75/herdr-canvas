@@ -36,6 +36,8 @@ Three files in that directory. The watcher assembles and redraws them within a s
 2. **`log.txt`: append one line** `t<N> <one-line summary of this turn>`. Newest 10 are shown.
 3. **`title`**: set once, the session topic in 2-4 words. Change it if the topic changes.
 
+- **Write the canvas last.** Do the work first, then describe what is true when the reply ends. A canvas written before the work freezes the plan and reads as stale a second later.
+
 ### What goes in `turn.html`
 
 Match the reply. A quick answer gets a status line and nothing else. Anything with structure gets drawn: a process is a flow or a mermaid diagram, numbers are a chart, options are a table, a system is a diagram. Prefer a picture over prose whenever the content has parts, order, or quantity. Never pad.
