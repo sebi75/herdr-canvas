@@ -36,8 +36,9 @@ if not os.path.exists(pane):  # canvas not on for this session
 if event == "UserPromptSubmit":
     open(stamp, "w").write(str(time.time()))
 elif event == "Stop" and not d.get("stop_hook_active"):
-    stale = not os.path.exists(turn_html) or os.path.getmtime(turn_html) < os.path.getmtime(stamp)
-    if os.path.exists(stamp) and stale:
+    if not os.path.exists(stamp):  # no prompt seen yet in this session
+        sys.exit(0)
+    if not os.path.exists(turn_html) or os.path.getmtime(turn_html) < os.path.getmtime(stamp):
         print(json.dumps({"decision": "block", "reason":
             f"Canvas is on but {turn_html} was not rewritten this turn. "
             "Write this reply's turn.html and append a log line as the canvas skill "
