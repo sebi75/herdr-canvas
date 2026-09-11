@@ -7,17 +7,8 @@ tables, decisions, a turn log. A small watcher renders it with headless Chrome a
 image in a Herdr pane next to the agent through Herdr's graphics API. Nothing opens in a
 browser, and a Stop hook keeps the agent from ending a turn without updating it.
 
-```
-┌─────────────────────────┬──────────────────────────┐
-│ claude                  │ canvas · w3:p24          │
-│                         │                          │
-│ > fix the upload retry  │  Turn 7: retry was       │
-│                         │  swallowing 429s         │
-│ Found it. The backoff…  │  ┌────┐ ┌────┐ ┌────┐    │
-│                         │  │ … │→│ … │→│ … │       │
-│                         │  DECIDED   OPEN   NEXT   │
-└─────────────────────────┴──────────────────────────┘
-```
+![herdr-canvas](docs/hero.png)
+
 
 ## Requirements
 
