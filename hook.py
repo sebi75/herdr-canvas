@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Claude Code hooks for the session canvas.
 
-UserPromptSubmit stamps the start of a turn. Stop refuses to end a turn whose
-turn.html is older than that stamp, so the canvas cannot silently go stale.
+UserPromptSubmit stamps the start of a turn. PostToolUse records the last piece
+of real work. Stop refuses to end a turn whose turn.html is missing, older than
+the prompt, or older than that last piece of work.
 SessionEnd closes the canvas pane so it does not outlive the agent. SessionStart
 opens the canvas automatically, and is only used if you register it.
 """
@@ -20,6 +21,7 @@ sid = d.get("session_id", "")
 event = d.get("hook_event_name")
 sdir = os.path.join(SESSIONS, sid)
 turn_html, pane, stamp = (os.path.join(sdir, n) for n in ("turn.html", "pane", "turn"))
+last_tool = os.path.join(sdir, "last_tool")
 
 if event == "SessionStart":
     if not os.environ.get("HERDR_PANE_ID"):
@@ -43,6 +45,13 @@ if event == "SessionEnd":
 
 if event == "UserPromptSubmit":
     open(stamp, "w").write(str(time.time()))
+    for f in (last_tool,):
+        if os.path.exists(f):
+            os.remove(f)
+elif event == "PostToolUse":
+    # Record work done this turn, ignoring the calls that write the canvas itself.
+    if sdir not in json.dumps(d.get("tool_input", {})):
+        open(last_tool, "w").write(str(time.time()))
 elif event == "Stop" and not d.get("stop_hook_active"):
     if not os.path.exists(stamp):  # no prompt seen yet in this session
         sys.exit(0)
@@ -51,3 +60,8 @@ elif event == "Stop" and not d.get("stop_hook_active"):
             f"Canvas is on but {turn_html} was not rewritten this turn. "
             "Write this reply's turn.html and append a log line as the canvas skill "
             "describes, then finish."}))
+    elif os.path.exists(last_tool) and os.path.getmtime(turn_html) < os.path.getmtime(last_tool):
+        print(json.dumps({"decision": "block", "reason":
+            f"{turn_html} was written before the rest of this turn's work, so it "
+            "describes the plan instead of the result. Rewrite it to say what is "
+            "true now, then finish."}))
