@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Claude Code hooks for the session canvas.
 
-UserPromptSubmit stamps the start of a turn. PostToolUse records the last piece
-of real work. Stop refuses to end a turn whose turn.html is missing, older than
-the prompt, or older than that last piece of work.
+UserPromptSubmit stamps the start of a turn, and marks it when the prompt is a
+/loop firing. PostToolUse records the last piece of real work. Stop refuses to
+end a turn whose turn.html is missing, older than the prompt, or older than that
+last piece of work, and lets a quiet loop tick through untouched.
 SessionEnd closes the canvas pane so it does not outlive the agent. SessionStart
 opens the canvas automatically, and is only used if you register it.
 """
@@ -22,6 +23,14 @@ event = d.get("hook_event_name")
 sdir = os.path.join(SESSIONS, sid)
 turn_html, pane, stamp = (os.path.join(sdir, n) for n in ("turn.html", "pane", "turn"))
 last_tool = os.path.join(sdir, "last_tool")
+loop_tick = os.path.join(sdir, "loop_tick")
+
+
+def is_loop(prompt):
+    """A /loop firing re-sends its own prompt, so quiet ticks should not force a rewrite."""
+    p = (prompt or "").lstrip()
+    return p.startswith("/loop") or "<<autonomous-loop" in p
+
 
 if event == "SessionStart":
     if not os.environ.get("HERDR_PANE_ID"):
@@ -45,9 +54,11 @@ if event == "SessionEnd":
 
 if event == "UserPromptSubmit":
     open(stamp, "w").write(str(time.time()))
-    for f in (last_tool,):
+    for f in (last_tool, loop_tick):
         if os.path.exists(f):
             os.remove(f)
+    if is_loop(d.get("prompt")):
+        open(loop_tick, "w").write("1")
 elif event == "PostToolUse":
     # Record work done this turn, ignoring the calls that write the canvas itself.
     blob = json.dumps(d.get("tool_input", {}))
@@ -55,6 +66,8 @@ elif event == "PostToolUse":
         open(last_tool, "w").write(str(time.time()))
 elif event == "Stop" and not d.get("stop_hook_active"):
     if not os.path.exists(stamp):  # no prompt seen yet in this session
+        sys.exit(0)
+    if os.path.exists(loop_tick):  # a loop tick updates the canvas only when it found something
         sys.exit(0)
     if not os.path.exists(turn_html) or os.path.getmtime(turn_html) < os.path.getmtime(stamp):
         print(json.dumps({"decision": "block", "reason":

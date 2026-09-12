@@ -36,6 +36,7 @@ Three files in that directory. The watcher assembles and redraws them within a s
 2. **`log.txt`: append one line** `t<N> <one-line summary of this turn>`. Newest 10 are shown.
 3. **`title`**: set once, the session topic in 2-4 words. Change it if the topic changes.
 
+- **A loop tick that found nothing leaves the canvas alone.** When the turn came from `/loop` and there is no news, do not rewrite `turn.html` and do not add a log line. Replacing real content with "still waiting" loses what the canvas was for. When the tick does find something, update it normally.
 - **Write the canvas last.** Do the work first, then describe what is true when the reply ends. A canvas written before the work freezes the plan and reads as stale a second later.
 
 ### What goes in `turn.html`
