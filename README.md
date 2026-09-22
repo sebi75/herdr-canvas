@@ -15,6 +15,7 @@ browser, and a Stop hook keeps the agent from ending a turn without updating it.
 - [Herdr](https://herdr.dev) 0.7+, with agents running inside it
 - A terminal Herdr can draw images in (Ghostty, Kitty, WezTerm, iTerm2)
 - Chrome or Chromium, used headless as a renderer
+- macOS, for `sips` to cut the render into pages
 - Python 3.9+, no packages
 
 ## Install

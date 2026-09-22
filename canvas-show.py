@@ -126,15 +126,16 @@ def render_full(d, html, w, page_h, pages):
 
 
 def page_png(d, full, page, w, page_h):
-    """Cut one pane-height out of the full render by showing it shifted in a tiny page. Cached."""
+    """Cut one pane-height out of the full render with sips (macOS built-in, ~0.1s). Cached.
+    sips pads a box that overruns the image, so a render a pixel short is fine."""
     png = os.path.join(d, f"canvas-p{page}.png")
     if not os.path.exists(png):
-        w_css, page_css = round(w / ZOOM), round(page_h / ZOOM)
-        variant = os.path.join(d, f"canvas-p{page}.html")
-        open(variant, "w").write(
-            f'<body style="margin:0;background:#131A1C"><img src="file://{full}" '
-            f'style="display:block;width:{w_css}px;margin-top:-{page * page_css}px"></body>')
-        chrome([f"--screenshot={png}"], w_css, page_css, variant)
+        off = page * page_h
+        h_full = struct.unpack(">I", open(full, "rb").read(24)[20:24])[0]
+        if off and off + page_h == h_full:  # sips returns the whole image when the box ends exactly at the edge
+            off -= 1
+        subprocess.run(["sips", "-c", str(page_h), str(w), "--cropOffset", str(off), "0",
+                        full, "--out", png], check=True, capture_output=True, timeout=30)
     return png
 
 
@@ -166,8 +167,9 @@ def keys(fd):
         return []
     buf = os.read(fd, 4096)
     out = []
-    for m in re.finditer(rb"\x1b\[<(64|65);\d+;\d+[Mm]", buf):
-        out.append("prev" if m.group(1) == b"64" else "next")
+    wheel = re.findall(rb"\x1b\[<(64|65);\d+;\d+[Mm]", buf)
+    if wheel:  # a trackpad swipe sends dozens of ticks: one page per burst, then the rest is drained
+        out.append("prev" if wheel[-1] == b"64" else "next")
     buf = re.sub(rb"\x1b\[<\d+;\d+;\d+[Mm]", b"", buf)
     for tok in (b"\x1b[B", b"\x1b[6~", b"j", b" "):
         out += ["next"] * buf.count(tok)
@@ -217,6 +219,8 @@ def main():
                     html = assemble(d)
                     pages = measure(html, w, page_h)
                     full = render_full(d, html, w, page_h, pages)
+                    for p in range(pages):  # pre-cut every page so flips are instant
+                        page_png(d, full, p, w, page_h)
                     page = 0
                     moves = ["top"]
                     log.write(f"{time.strftime('%H:%M:%S')} {w}x{page_h} pages={pages}\n")
@@ -237,7 +241,8 @@ def main():
                     sys.stdout.flush()
                 except Exception as e:
                     log.write(f"{time.strftime('%H:%M:%S')} place err {e!r}\n"); log.flush()
-            time.sleep(0.1 if moves else 0.4)
+                time.sleep(0.25); keys(fd)  # drain the rest of a wheel burst
+            select.select([fd], [], [], 0.4)  # wake on a key at once, poll files otherwise
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
         sys.stdout.write("\x1b[?1000l\x1b[?1006l\x1b[?25h")
