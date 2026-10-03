@@ -29,14 +29,19 @@ It prints the session directory. Idempotent. If it prints `not inside a Herdr pa
 
 Copy into every compaction summary: `Canvas is on in <dir>; reread ~/.claude/skills/canvas/SKILL.md before the next reply.` A Stop hook blocks the turn until this is done.
 
-Three files in that directory. The watcher assembles and redraws them within a second, and archives every version under `history/`.
+The board has two layers. `turn.html` is this reply's news and is replaced every turn. `panels/` holds what outlives a turn, and each panel changes only when its content changes. The watcher assembles them within a second: news on top, then the panels written this turn (marked `updated`), then the rest (marked with the time they last changed), then the log. It keeps one snapshot of the whole board per turn under `history/`.
 
-0. **Recall first.** Read the current `turn.html` and `log.txt` before writing. Open `history/` when an older version matters. The new fragment is built from the previous one plus this reply: keep what still holds, update what changed, drop what is done.
-1. **`turn.html`: overwrite the whole file.** Two parts: this reply's news on top (status line, one visual), then a carried **State** section (`.cols` with Decided / Open / Next, or whatever headings fit) that you rewrite from the previous version every turn. Carried means reviewed and updated, never pasted unchanged and never mechanically left behind.
-2. **`log.txt`: append one line** `t<N> <one-line summary of this turn>`. Newest 10 are shown.
-3. **`title`**: set once, the session topic in 2-4 words. Change it if the topic changes.
+0. **Recall first.** Run `ls panels/` and read the panels this reply touches, plus the tail of `log.txt`. Open `history/turn-*.html` when an earlier turn matters.
+1. **`turn.html`: overwrite it every reply.** This reply's news only: the status line and at most one or two visuals. It fits on one screen. Do not carry anything over from the last turn here. Anything worth carrying goes in a panel.
+2. **`panels/<name>.html`: change only what changed.** A panel holds one thing that stays true across turns: the state (Decided / Open / Next), a plan, a system diagram, a findings table.
+   - New topic: create the panel with Write.
+   - A fact changed: Edit those lines. Leave a panel whose content still holds untouched, so its `updated` mark means something.
+   - Done or wrong: delete the panel, or shrink it to one line in the state panel.
+   - The file name is the heading: `open-questions.html` shows as "open questions". A number prefix such as `10-` sets the order and is not shown.
+3. **`log.txt`: append one line** `t<N> <one-line summary of this turn>`. Newest 10 are shown.
+4. **`title`**: set once, the session topic in 2-4 words. Change it if the topic changes.
 
-- **A loop tick that found nothing leaves the canvas alone.** When the turn came from `/loop` and there is no news, do not rewrite `turn.html` and do not add a log line. Replacing real content with "still waiting" loses what the canvas was for. When the tick does find something, update it normally.
+- **A loop tick that found nothing leaves the canvas alone.** When the turn came from `/loop` and there is no news, do not touch `turn.html`, the panels, or the log. Replacing real content with "still waiting" loses what the canvas was for. When the tick does find something, update it normally.
 - **Write the canvas last.** Do the work first, then describe what is true when the reply ends. A canvas written before the work freezes the plan and reads as stale a second later.
 
 ### What goes in `turn.html`
@@ -47,9 +52,16 @@ Match the reply. A quick answer gets a status line and nothing else. Anything wi
 - Then at most one or two of:
   - `.flow`: `<div class="flow"><div class="box ok"><b>Step</b><span>detail</span></div><div class="arrow">→</div>…</div>` for a pipeline, a chain, or a decision path. `.box.warn` for a problem.
   - `<table>`: comparisons, options, inventories.
-  - `.cols`: `<div class="cols"><div class="col now"><h2>Now</h2><ul>…</ul></div><div class="col"><h2>Next</h2>…</div></div>` when there is real state to track. Any headings, not only Now / Next.
+  - `.cols`: `<div class="cols"><div class="col now"><h2>Now</h2><ul>…</ul></div><div class="col"><h2>Next</h2>…</div></div>` for side-by-side lists. Any headings, not only Now / Next.
   - Inline `<svg>` for a diagram. `<p>` for one or two sentences when words beat boxes.
 - Wrap each visual in `<section><h2>label</h2>…</section>`. Use `<code>` for paths and commands, `<span class="tag">` for a short badge, `.tag.w` for a warning.
+
+### What goes in a panel
+
+- One topic per panel, at most about a third of a screen. Split a panel that grows past that.
+- The same building blocks as `turn.html`, without the status line and without a `<section>` or `<h2>` wrapper. The watcher adds the frame and the heading.
+- Keep about six panels at most. Delete the ones that no longer help.
+- The usual first panel is `10-state.html`: `.cols` with Decided / Open / Next.
 
 ### When the user asks several questions
 
@@ -63,7 +75,7 @@ Answer every one, in order, in a table, so none gets lost:
 </table></section>
 ```
 
-Number the chat reply the same way. Anything not answered goes into the carried State section as Open, and stays there until it is.
+The table goes in `turn.html`. Number the chat reply the same way. Anything not answered goes into the state panel as Open, and stays there until it is.
 
 ### Charts and diagrams (preferred over text)
 
@@ -76,4 +88,4 @@ The user wants things represented visually. Reach for these first, prose last.
 
 ### Length
 
-One pane is about 1600x1200 px at 1.5x. Longer content is paged: the watcher renders the full height (up to 6 pages) and the user pages with j/k or the mouse wheel in the canvas pane. Page 1 must stand alone: status, the answer, the main visual. Details, the State section, and the log can follow. Never shrink text to fit.
+One pane is about 1600x1200 px at 1.5x. Page 1 shows the news and then the panels updated this turn, so keep both short. The full board is paged up to 6 pages: the user pages with j/k or the mouse wheel. h/l (or left/right) steps back and forward through earlier turns, and any new write returns the pane to the live board. Never shrink text to fit.

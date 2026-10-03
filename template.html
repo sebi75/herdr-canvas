@@ -31,9 +31,14 @@
   svg { max-width:100%; height:auto; }
   pre.mermaid { margin:0; display:flex; justify-content:center; }
   pre.mermaid svg { max-width:100%; max-height:38vh; width:auto; height:auto; }
+  .panel { border-left:3px solid var(--line); padding:2px 0 2px 14px; }
+  .panel.new { border-left-color:var(--accent); }
+  .panel h2 .tag, .since { margin-left:10px; text-transform:none; letter-spacing:0; }
+  .since { font-size:10.5px; color:var(--muted); opacity:.75; }
 </style>
 <main>
 {{TURN}}
+{{BOARD}}
   <section>
     <h2>Turn log</h2>
     <ul class="log">

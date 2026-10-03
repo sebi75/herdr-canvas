@@ -2,12 +2,16 @@
 
 A live visual canvas for AI coding agents, drawn into a Herdr pane beside the agent. No browser.
 
-Each session gets an HTML page the agent rewrites on every reply: status, diagrams, charts,
-tables, decisions, a turn log. A small watcher renders it with headless Chrome and places the
-image in a Herdr pane next to the agent through Herdr's graphics API. Nothing opens in a
-browser, and a Stop hook keeps the agent from ending a turn without updating it.
+Each session gets an HTML board: a short news card the agent replaces every reply, panels
+it edits only when they change (state, diagrams, charts, tables), and a turn log. A small
+watcher renders it with headless Chrome and places the image in a Herdr pane next to the
+agent through Herdr's graphics API. Nothing opens in a browser, and a Stop hook keeps the
+agent from ending a turn without updating it.
 
 ![herdr-canvas](docs/hero.png)
+
+For a live, clickable board inside Claude Code itself, drawn by headless Chrome in a Claude Code
+pane, see [agent-canvas](https://github.com/sebi75/agent-canvas). It grew out of this project.
 
 
 ## Requirements
@@ -44,19 +48,24 @@ Inside the canvas pane:
 | `j`, space, `↓`, PgDn, wheel down | next page |
 | `k`, `b`, `↑`, PgUp, wheel up | previous page |
 | `g` | first page |
+| `h`, `←` | previous turn |
+| `l`, `→` | next turn (back to live) |
 
 ## How it works
 
-Three files per session, under `sessions/<session-id>/`:
+Per session, under `sessions/<session-id>/`:
 
-- `turn.html` — the agent overwrites this every reply. Nothing from the previous turn
-  survives unless the agent writes it again, so the canvas cannot drift.
+- `turn.html` — this reply's news. The agent overwrites it every reply.
+- `panels/<name>.html` — what outlives a turn: state, a plan, a diagram. The agent edits a
+  panel only when its content changes. Panels written this turn show first, marked
+  `updated`; the rest follow with the time they last changed. The file name is the heading.
 - `log.txt` — one appended line per turn. The newest ten are shown.
 - `title` — the session topic.
 
-The watcher polls those three, assembles them into `canvas.html` with the template, measures
-the page, renders it once at full height, and cuts each screen from that one image. Every
-version of `turn.html` is kept under `history/` so the agent can look back.
+The watcher polls those, assembles them into `canvas.html` with the template, measures
+the page, renders it once at full height, and cuts each screen from that one image. One
+snapshot of the whole board per turn is kept under `history/`, for h/l and for the agent
+to look back.
 
 ## Configuration
 
