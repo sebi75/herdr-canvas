@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # ponytail: stdlib-only canvas watcher for a Herdr pane.
-# Assembles canvas.html from template + turn.html + log.txt + title, renders it
+# Assembles canvas.html from template + turn.html (this turn's news) + panels/*.html
+# (kept across turns, edited only when they change) + log.txt + title, renders it
 # with headless Chrome at the pane's exact pixel width and the page's full height,
 # and places the PNG in this pane through Herdr's pane.graphics.set. Content
-# taller than the pane is paged: j/k, space/b, arrows, PgUp/PgDn, or the mouse
-# wheel inside the pane. Re-renders when any input or the pane size changes.
+# taller than the pane is paged: j/k, space/b, up/down, PgUp/PgDn, or the mouse
+# wheel. One snapshot per turn goes to history/; h/l or left/right step through
+# them. Re-renders when any input or the pane size changes.
 # Ceiling: static picture, no clicks inside the page.
 import base64
 import fcntl
+import glob
 import html as H
 import json
 import math
@@ -69,34 +72,76 @@ def mtime(path):
         return None
 
 
-def archive(d):
-    """Keep every version of turn.html under history/ for recall."""
-    src = os.path.join(d, "turn.html")
-    if not os.path.exists(src):
-        return
-    hist = os.path.join(d, "history"); os.makedirs(hist, exist_ok=True)
-    n = len([l for l in read(os.path.join(d, "log.txt")).splitlines() if l.strip()])
-    dst = os.path.join(hist, f"t{n:03d}-{time.strftime('%H%M%S')}.html")
-    if not os.path.exists(dst):
-        open(dst, "w").write(read(src))
+def turn_start(d):
+    """When the current prompt arrived (the hook writes it), 0 before the first one."""
+    try:
+        return float(read(os.path.join(d, "turn"), "0") or 0)
+    except ValueError:
+        return 0.0
+
+
+def panels(d):
+    """[(file name, path, mtime)] of panels/*.html, sorted by name."""
+    out = []
+    for path in sorted(glob.glob(os.path.join(d, "panels", "*.html"))):
+        t = mtime(path)
+        if t is not None:  # deleted between glob and stat
+            out.append((os.path.basename(path), path, t))
+    return out
+
+
+def board(d):
+    """Panels written this turn first, marked updated; the rest after, with the time they last changed."""
+    start, out = turn_start(d), []
+    for name, path, t in sorted(panels(d), key=lambda p: (p[2] < start, p[0])):
+        label = H.escape(re.sub(r"^\d+-", "", name[:-5]).replace("-", " "))
+        if t >= start:
+            out.append(f'<section class="panel new"><h2>{label}<span class="tag">updated</span></h2>\n{read(path)}\n</section>')
+        else:
+            when = time.strftime("%H:%M", time.localtime(t))
+            out.append(f'<section class="panel"><h2>{label}<span class="since">since {when}</span></h2>\n{read(path)}\n</section>')
+    return "\n".join(out)
+
+
+def snapshots(d):
+    return sorted(glob.glob(os.path.join(d, "history", "turn-*.html")))
+
+
+def step(view, move, n):
+    """Move through n snapshots. None is the live board, which is also the newest snapshot."""
+    if not n or move not in ("older", "newer"):
+        return view
+    i = (n - 1 if view is None else view) + (1 if move == "newer" else -1)
+    return None if i >= n - 1 else max(0, i)
 
 
 def assemble(d):
-    archive(d)
     title = read(os.path.join(d, "title"), "Session Canvas").strip()
     turn = read(os.path.join(d, "turn.html"), '<div class="status">Canvas on. Waiting for the first turn.</div>')
+    panes = board(d)
     lines = [l for l in read(os.path.join(d, "log.txt")).splitlines() if l.strip()][-10:][::-1]
     log = "\n".join(
         f'      <li><time>{H.escape(l.split(" ", 1)[0])}</time>{H.escape(l.split(" ", 1)[1] if " " in l else "")}</li>'
         for l in lines
     )
-    page = read(TEMPLATE).replace("{{TITLE}}", H.escape(title)).replace("{{TURN}}", turn).replace("{{LOG}}", log)
-    if 'class="mermaid"' in turn:  # diagrams: loaded only when a turn uses them
+    page = (read(TEMPLATE).replace("{{TITLE}}", H.escape(title)).replace("{{TURN}}", turn)
+            .replace("{{BOARD}}", panes).replace("{{LOG}}", log))
+    if 'class="mermaid"' in turn + panes:  # diagrams: loaded only when the page uses them
         page += MERMAID
     page += MEASURE
     out = os.path.join(d, "canvas.html")
     open(out, "w").write(page)
+    # One snapshot per turn, overwritten until the next prompt, so h/l and recall see each turn's final board.
+    hist = os.path.join(d, "history"); os.makedirs(hist, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(turn_start(d)))
+    open(os.path.join(hist, f"turn-{stamp}.html"), "w").write(page)
     return out
+
+
+def inputs(d):
+    """Changes when the agent writes anything the board shows."""
+    return (tuple(mtime(os.path.join(d, n)) for n in ("turn.html", "log.txt", "title")),
+            tuple((n, t) for n, _, t in panels(d)))
 
 
 def chrome(args, w_css, h_css, html):
@@ -161,7 +206,7 @@ def place(png, w, h, cols, rows):
 
 
 def keys(fd):
-    """Non-blocking read of key presses and wheel events -> list of 'next'/'prev'/'top'."""
+    """Non-blocking read of key presses and wheel events -> list of 'next'/'prev'/'top'/'older'/'newer'."""
     r, _, _ = select.select([fd], [], [], 0)
     if not r:
         return []
@@ -175,6 +220,10 @@ def keys(fd):
         out += ["next"] * buf.count(tok)
     for tok in (b"\x1b[A", b"\x1b[5~", b"k", b"b"):
         out += ["prev"] * buf.count(tok)
+    for tok in (b"\x1b[D", b"h"):
+        out += ["older"] * buf.count(tok)
+    for tok in (b"\x1b[C", b"l"):
+        out += ["newer"] * buf.count(tok)
     if b"g" in buf:
         out.append("top")
     return out
@@ -182,7 +231,7 @@ def keys(fd):
 
 def main():
     d = sys.argv[1]
-    inputs = [os.path.join(d, n) for n in ("turn.html", "log.txt", "title")]
+    live = os.path.join(d, "canvas.html")
     open(os.path.join(d, "watcher.pid"), "w").write(str(os.getpid()))
     log = open(os.path.join(d, "watcher.log"), "a")
     log.write(f"{time.strftime('%H:%M:%S')} start pid={os.getpid()} pane={PANE}\n")
@@ -191,7 +240,7 @@ def main():
     tty.setcbreak(fd)
     sys.stdout.write("\x1b[?1000h\x1b[?1006h\x1b[?25l\x1b[2J\x1b[H")  # wheel events, hide cursor
     sys.stdout.flush()
-    last, page, pages, w, page_h, full = None, 0, 1, 0, 0, None
+    seen, shown, view, page, pages, w, page_h, full = None, None, None, 0, 1, 0, 0, None
     tick = 0
     try:
         while True:
@@ -206,9 +255,20 @@ def main():
                 return
             rows, cols = winsize()
             grid_rows = max(rows - 1, 1)
-            key = (tuple(mtime(p) for p in inputs), rows, cols)
             moves = keys(fd)
-            if key != last:
+            now = inputs(d)
+            if now != seen:  # the agent wrote something: rebuild and go back to the live board
+                try:
+                    assemble(d)
+                except Exception as e:  # keep the watcher alive
+                    log.write(f"{time.strftime('%H:%M:%S')} assemble err {e!r}\n"); log.flush()
+                seen, view = now, None
+            snaps = snapshots(d)
+            for mv in moves:
+                view = step(view, mv, len(snaps))
+            target = live if view is None else snaps[view]
+            want = (target, mtime(target), rows, cols)
+            if want != shown:
                 try:
                     info = rpc("pane.graphics.info", {"pane_id": PANE})["result"]
                     cw, ch = info["cell_width_px"], info["cell_height_px"]
@@ -216,27 +276,32 @@ def main():
                     for f in os.listdir(d):  # drop cached pages from the previous render
                         if f.startswith("canvas-p"):
                             os.remove(os.path.join(d, f))
-                    html = assemble(d)
-                    pages = measure(html, w, page_h)
-                    full = render_full(d, html, w, page_h, pages)
+                    pages = measure(target, w, page_h)
+                    full = render_full(d, target, w, page_h, pages)
                     for p in range(pages):  # pre-cut every page so flips are instant
                         page_png(d, full, p, w, page_h)
                     page = 0
                     moves = ["top"]
-                    log.write(f"{time.strftime('%H:%M:%S')} {w}x{page_h} pages={pages}\n")
+                    log.write(f"{time.strftime('%H:%M:%S')} {os.path.basename(target)} {w}x{page_h} pages={pages}\n")
                 except Exception as e:  # keep the watcher alive
                     log.write(f"{time.strftime('%H:%M:%S')} err {e!r}\n")
                 log.flush()
-                last = key
+                shown = want
             if moves and full:
                 for mv in moves:
-                    page = 0 if mv == "top" else min(pages - 1, max(0, page + (1 if mv == "next" else -1)))
+                    if mv == "top":
+                        page = 0
+                    elif mv in ("next", "prev"):
+                        page = min(pages - 1, max(0, page + (1 if mv == "next" else -1)))
                 try:
                     r = place(page_png(d, full, page, w, page_h), w, page_h, cols, grid_rows)
-                    hint = "  j/k or wheel to page" if pages > 1 else ""
+                    name = os.path.basename(target)
+                    where = "live" if view is None else f"{name[14:16]}:{name[16:18]}  l: newer"
+                    hint = "  j/k page" if pages > 1 else ""
+                    turns = "  h: older" if len(snaps) > 1 and view != 0 else ""
                     sys.stdout.write(
-                        f"\x1b[{rows};1H\x1b[2K{time.strftime('%H:%M:%S')}  page {page + 1}/{pages}{hint}  "
-                        f"{'ok' if 'result' in r else r.get('error')}"
+                        f"\x1b[{rows};1H\x1b[2Kturn {len(snaps) if view is None else view + 1}/{len(snaps)} {where}"
+                        f"  page {page + 1}/{pages}{hint}{turns}  {'ok' if 'result' in r else r.get('error')}"
                     )
                     sys.stdout.flush()
                 except Exception as e:
